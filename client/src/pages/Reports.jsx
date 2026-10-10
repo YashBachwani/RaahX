@@ -199,6 +199,10 @@ const Reports = () => {
   const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
   
+  // Exception controls state
+  const [filterSeverity, setFilterSeverity] = useState('All');
+  const [ackedExceptions, setAckedExceptions] = useState(new Set());
+  
   const handleFileSelected = (system, file) => {
     setFiles(prev => ({ ...prev, [system]: file }));
     setError(null);
@@ -245,6 +249,7 @@ const Reports = () => {
       }
 
       setReportData(data);
+      setAckedExceptions(new Set());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -254,6 +259,15 @@ const Reports = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+  
+  const toggleAck = (idx) => {
+    setAckedExceptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(idx)) newSet.delete(idx);
+      else newSet.add(idx);
+      return newSet;
+    });
   };
 
   const renderSystemCard = (systemName, sysData) => {
@@ -273,7 +287,7 @@ const Reports = () => {
           </div>
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200">
              <div>
-                <p className="text-xs text-raahx-slate font-medium uppercase tracking-wider mb-1">Completion</p>
+                <p className="text-xs text-raahx-slate font-medium uppercase tracking-wider mb-1">Overall Completion</p>
                 <p className={`text-lg font-bold ${parseFloat(sysData.completionRate) < 95 ? 'text-red-600' : 'text-green-600'}`}>
                   {sysData.completionRate || 'N/A'}%
                 </p>
@@ -287,6 +301,10 @@ const Reports = () => {
       </div>
     );
   };
+
+  const filteredExceptions = (reportData?.exceptions || []).filter(exc => 
+    filterSeverity === 'All' || exc.severity === filterSeverity
+  );
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 font-inter">
@@ -406,19 +424,35 @@ const Reports = () => {
             </section>
 
             {/* Exceptions & Findings */}
-            <section>
-              <h3 className="text-lg font-bold text-raahx-navy border-b border-gray-100 pb-2 mb-4 flex items-center">
-                <Search size={18} className="mr-2 text-raahx-cyan" /> Significant Exceptions
-              </h3>
+            <section className="print:break-before-auto">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 pb-2 mb-4">
+                <h3 className="text-lg font-bold text-raahx-navy flex items-center">
+                  <Search size={18} className="mr-2 text-raahx-cyan" /> Significant Exceptions
+                </h3>
+                <div className="flex items-center space-x-2 mt-2 sm:mt-0 print:hidden">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filter:</span>
+                  {['All', 'Critical', 'High', 'Medium'].map(sev => (
+                    <button
+                      key={sev}
+                      onClick={() => setFilterSeverity(sev)}
+                      className={`px-3 py-1 text-xs font-bold rounded-full border transition-colors ${filterSeverity === sev ? 'bg-raahx-navy text-white border-raahx-navy' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      {sev}
+                    </button>
+                  ))}
+                </div>
+              </div>
               
-              {(reportData.exceptions || []).length === 0 ? (
+              {filteredExceptions.length === 0 ? (
                 <div className="p-6 text-center text-raahx-slate bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                  No significant exceptions or delays detected across any network.
+                  {filterSeverity === 'All' ? 'No significant exceptions or delays detected across any network.' : `No ${filterSeverity} exceptions found.`}
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {(reportData.exceptions || []).map((exc, idx) => (
-                    <div key={idx} className="flex flex-col md:flex-row gap-4 p-5 rounded-lg border border-gray-200 bg-white shadow-sm">
+                  {filteredExceptions.map((exc, idx) => {
+                    const isAcked = ackedExceptions.has(idx);
+                    return (
+                    <div key={idx} className={`flex flex-col md:flex-row gap-4 p-5 rounded-lg border shadow-sm transition-opacity ${isAcked ? 'bg-gray-50 border-gray-200 opacity-60 print:opacity-100' : 'bg-white border-gray-200'}`}>
                       <div className="w-full md:w-1/4">
                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider mb-2 bg-gray-100 text-gray-700">
                            <span className={`w-2 h-2 rounded-full ${exc.severity === 'Critical' ? 'bg-red-600' : exc.severity === 'High' ? 'bg-orange-500' : 'bg-amber-400'}`}></span>
@@ -431,7 +465,7 @@ const Reports = () => {
                            {exc.location}
                          </p>
                       </div>
-                      <div className="w-full md:w-3/4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="w-full md:w-2/4 grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Observed Fact & Evidence</p>
                           <p className="text-sm text-raahx-navy font-medium mb-1">{exc.evidence}</p>
@@ -445,14 +479,22 @@ const Reports = () => {
                           </p>
                         </div>
                       </div>
+                      <div className="w-full md:w-1/4 flex items-start justify-end print:hidden border-t md:border-t-0 md:border-l border-gray-100 pt-3 md:pt-0 pl-0 md:pl-4">
+                         <button 
+                           onClick={() => toggleAck(idx)}
+                           className={`px-4 py-2 text-xs font-bold rounded-md w-full border ${isAcked ? 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}
+                         >
+                           {isAcked ? 'Undo' : 'Acknowledge'}
+                         </button>
+                      </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </section>
 
             {/* Cross-System Hub Comparison */}
-            <section>
+            <section className="print:break-before-page">
               <h3 className="text-lg font-bold text-raahx-navy border-b border-gray-100 pb-2 mb-4 flex items-center">
                 <Database size={18} className="mr-2 text-raahx-slate" /> Hub-Level Cross-System Analysis
               </h3>
@@ -461,9 +503,9 @@ const Reports = () => {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="px-4 py-3 font-semibold text-raahx-slate border-r border-gray-200">Hub / Interchange</th>
-                      <th className="px-4 py-3 font-semibold text-raahx-slate">Metro Ridership</th>
-                      <th className="px-4 py-3 font-semibold text-raahx-slate">BRTS Ridership</th>
-                      <th className="px-4 py-3 font-semibold text-raahx-slate">AMTS Ridership</th>
+                      <th className="px-4 py-3 font-semibold text-raahx-slate">Metro Performance</th>
+                      <th className="px-4 py-3 font-semibold text-raahx-slate">BRTS Performance</th>
+                      <th className="px-4 py-3 font-semibold text-raahx-slate">AMTS Performance</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -472,42 +514,29 @@ const Reports = () => {
                         <td className="px-4 py-3 font-semibold text-raahx-navy border-r border-gray-200">
                            {hub.hub_id} - {hub.hub_name}
                         </td>
-                        <td className="px-4 py-3">
-                          {hub.Metro ? (
-                             <div>
-                                <span className="font-medium text-raahx-navy">{hub.Metro.ridership}</span>
-                                {typeof hub.Metro.percentChange === 'number' && (
-                                   <span className={`ml-2 text-xs font-semibold ${hub.Metro.percentChange < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {hub.Metro.percentChange > 0 ? '+' : ''}{hub.Metro.percentChange.toFixed(1)}%
-                                   </span>
-                                )}
-                             </div>
-                          ) : <span className="text-gray-400 italic">No data</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {hub.BRTS ? (
-                             <div>
-                                <span className="font-medium text-raahx-navy">{hub.BRTS.ridership}</span>
-                                {typeof hub.BRTS.percentChange === 'number' && (
-                                   <span className={`ml-2 text-xs font-semibold ${hub.BRTS.percentChange < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {hub.BRTS.percentChange > 0 ? '+' : ''}{hub.BRTS.percentChange.toFixed(1)}%
-                                   </span>
-                                )}
-                             </div>
-                          ) : <span className="text-gray-400 italic">No data</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {hub.AMTS ? (
-                             <div>
-                                <span className="font-medium text-raahx-navy">{hub.AMTS.ridership}</span>
-                                {typeof hub.AMTS.percentChange === 'number' && (
-                                   <span className={`ml-2 text-xs font-semibold ${hub.AMTS.percentChange < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                      {hub.AMTS.percentChange > 0 ? '+' : ''}{hub.AMTS.percentChange.toFixed(1)}%
-                                   </span>
-                                )}
-                             </div>
-                          ) : <span className="text-gray-400 italic">No data</span>}
-                        </td>
+                        {['Metro', 'BRTS', 'AMTS'].map(sysName => (
+                          <td key={sysName} className="px-4 py-3">
+                            {hub[sysName] ? (
+                               <div>
+                                  <div className="mb-1">
+                                    <span className="text-xs text-gray-500 uppercase">Vol: </span>
+                                    <span className="font-medium text-raahx-navy">{hub[sysName].ridership.toLocaleString()}</span>
+                                    {typeof hub[sysName].percentChange === 'number' && (
+                                       <span className={`ml-2 text-xs font-bold ${hub[sysName].percentChange < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                          {hub[sysName].percentChange > 0 ? '+' : ''}{hub[sysName].percentChange.toFixed(1)}%
+                                       </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs">
+                                    <span className="text-gray-500 uppercase mr-1">Hub Comp:</span>
+                                    <span className={`ml-1 font-bold ${parseFloat(hub[sysName].completionRate) < 95 ? 'text-red-600' : 'text-green-600'}`}>
+                                      {hub[sysName].completionRate}%
+                                    </span>
+                                  </div>
+                               </div>
+                            ) : <span className="text-gray-400 italic text-xs">No data</span>}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

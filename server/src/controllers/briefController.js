@@ -91,7 +91,8 @@ const processSystemData = (records, systemName) => {
       delay,
       prevDelay,
       incident,
-      system: systemName
+      system: systemName,
+      completionRate: scheduled > 0 ? ((completed / scheduled) * 100).toFixed(1) : '100.0'
     });
 
     // Exceptions Rules

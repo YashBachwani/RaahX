@@ -14,6 +14,7 @@ const MainLayout = () => {
     { name: 'Data Sources', path: '/reports' },
     { name: 'Exceptions', path: '/reports' },
     { name: 'Reports', path: '/reports' },
+    { name: 'Journey Planner', path: '/journey-planner' },
   ];
 
   return (
