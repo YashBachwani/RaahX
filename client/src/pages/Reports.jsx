@@ -6,23 +6,206 @@ import StatusBadge from '../components/StatusBadge';
 import Logo from '../components/Logo';
 import ErrorBoundary from '../components/ErrorBoundary';
 
+const UploadBox = ({ system, file, onFileSelected, onClear }) => {
+  const [status, setStatus] = useState('idle'); // idle, parsing, valid, warning, error
+  const [summary, setSummary] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const inputRef = useRef(null);
+
+  // Sync state if file is cleared externally (e.g. "Clear Files" button)
+  React.useEffect(() => {
+    // Only revert to idle if the file was cleared AND we were previously in a valid/warning state.
+    // Do not revert during 'parsing' (file is still null in parent) or 'error' (we want to show the error).
+    if (!file && (status === 'valid' || status === 'warning')) {
+      setStatus('idle');
+      setSummary(null);
+      setErrorMsg(null);
+      if (inputRef.current) inputRef.current.value = null;
+    }
+  }, [file, status]);
+
+  const handleFile = (e) => {
+    const selectedFile = e.target.files && e.target.files[0];
+    if (!selectedFile) return;
+
+    if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
+      setStatus('error');
+      setErrorMsg('Invalid file type. Please upload a .csv file.');
+      if (inputRef.current) inputRef.current.value = null;
+      onClear();
+      return;
+    }
+
+    setStatus('parsing');
+    setErrorMsg(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      // Clear input value AFTER read completes so the same file can be selected again
+      if (inputRef.current) inputRef.current.value = null;
+      
+      try {
+        const text = event.target.result;
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+        
+        if (lines.length === 0 || (lines.length === 1 && lines[0] === '')) {
+          setStatus('error');
+          setErrorMsg('Empty file.');
+          onClear();
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const required = ['hub_id', 'date', 'ridership'];
+        const missing = required.filter(r => !headers.includes(r));
+        
+        if (missing.length > 0) {
+          setStatus('error');
+          setErrorMsg(`Missing columns: ${missing.join(', ')}`);
+          onClear();
+          return;
+        }
+
+        let valid = 0;
+        let invalid = 0;
+        const ridershipIdx = headers.indexOf('ridership');
+
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',');
+          if (cols.length < headers.length) {
+            invalid++;
+            continue;
+          }
+          const ridership = parseInt(cols[ridershipIdx], 10);
+          if (isNaN(ridership) || ridership < 0) {
+            invalid++;
+          } else {
+            valid++;
+          }
+        }
+
+        if (valid === 0) {
+          setStatus('error');
+          setErrorMsg('No valid records found in file.');
+          onClear();
+          return;
+        }
+
+        setSummary({ valid, invalid, total: lines.length - 1, name: selectedFile.name, size: (selectedFile.size / 1024).toFixed(1) });
+        setStatus(invalid > 0 ? 'warning' : 'valid');
+        onFileSelected(selectedFile);
+      } catch (err) {
+        setStatus('error');
+        setErrorMsg('CSV parsing error.');
+        onClear();
+      }
+    };
+    reader.onerror = (err) => {
+      if (inputRef.current) inputRef.current.value = null;
+      setStatus('error');
+      setErrorMsg('Failed to read file.');
+      onClear();
+    };
+    reader.readAsText(selectedFile);
+  };
+
+  const handleClear = () => {
+    setStatus('idle');
+    setSummary(null);
+    setErrorMsg(null);
+    if (inputRef.current) inputRef.current.value = null;
+    onClear();
+  };
+
+  return (
+    <div className="flex flex-col h-full border rounded-lg bg-gray-50 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 bg-white">
+        <label className="block text-sm font-semibold text-raahx-navy capitalize">{system} Dataset</label>
+      </div>
+      <div className="p-4 flex-grow flex flex-col justify-center relative">
+        <input type="file" accept=".csv" onChange={handleFile} className="hidden" ref={inputRef} />
+        
+        {status === 'idle' && (
+          <Button 
+            variant="ghost" 
+            className="w-full h-16 flex flex-col items-center justify-center border-dashed border-2 hover:border-raahx-orange hover:bg-orange-50 transition-colors rounded-lg"
+            onClick={() => inputRef.current.click()}
+          >
+            <FileUp size={18} className="mb-1 text-raahx-slate" />
+            <span className="text-xs font-semibold text-raahx-slate">Upload CSV</span>
+          </Button>
+        )}
+
+        {status === 'parsing' && (
+          <div className="flex flex-col items-center justify-center h-16">
+            <RefreshCw size={18} className="animate-spin text-raahx-orange mb-2" />
+            <span className="text-xs font-semibold text-gray-500">Parsing...</span>
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="flex flex-col items-center text-center">
+            <div className="text-red-500 mb-1"><AlertCircle size={20} /></div>
+            <p className="text-xs font-bold text-red-700">{errorMsg}</p>
+            <button onClick={() => inputRef.current.click()} className="text-xs text-raahx-navy font-semibold mt-2 underline hover:text-raahx-orange">Try again</button>
+          </div>
+        )}
+
+        {(status === 'valid' || status === 'warning') && summary && (
+          <div className="flex flex-col h-full justify-between">
+            <div>
+              <div className="flex items-start justify-between">
+                 <div className="flex items-center">
+                   <div className="bg-green-100 p-1.5 rounded-md mr-2">
+                     <FileText size={16} className="text-green-700" />
+                   </div>
+                   <div className="overflow-hidden">
+                     <p className="text-sm font-bold text-raahx-navy truncate" title={summary.name}>{summary.name}</p>
+                     <p className="text-xs font-medium text-gray-500">{summary.size} KB</p>
+                   </div>
+                 </div>
+                 <button onClick={handleClear} className="text-gray-400 hover:text-red-500 p-1 transition-colors">
+                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                 </button>
+              </div>
+              
+              <div className="mt-3 bg-white border border-gray-200 rounded p-2 text-xs">
+                 <div className="flex justify-between mb-1">
+                   <span className="text-gray-500 font-medium">Valid records:</span>
+                   <span className="font-bold text-green-600">{summary.valid}</span>
+                 </div>
+                 {summary.invalid > 0 && (
+                   <div className="flex justify-between">
+                     <span className="text-gray-500 font-medium">Invalid rows:</span>
+                     <span className="font-bold text-red-500">{summary.invalid}</span>
+                   </div>
+                 )}
+              </div>
+            </div>
+            
+            <p className="text-xs font-bold text-center mt-3 text-green-700 flex items-center justify-center bg-green-50 py-1 rounded">
+              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg> Ready to import
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const Reports = () => {
   const [files, setFiles] = useState({ metro: null, brts: null, amts: null });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
   
-  const metroInput = useRef(null);
-  const brtsInput = useRef(null);
-  const amtsInput = useRef(null);
+  const handleFileSelected = (system, file) => {
+    setFiles(prev => ({ ...prev, [system]: file }));
+    setError(null);
+  };
 
-  const handleFileChange = (system, e) => {
-    if (e.target.files && e.target.files[0]) {
-      setFiles(prev => ({ ...prev, [system]: e.target.files[0] }));
-      setError(null);
-    }
-    // Reset so the same file can be selected again if needed
-    if (e.target) e.target.value = null;
+  const handleClearFile = (system) => {
+    setFiles(prev => ({ ...prev, [system]: null }));
   };
 
   const handleLoadDemo = async () => {
@@ -33,7 +216,7 @@ const Reports = () => {
 
   const analyzeData = async (useDemo = false) => {
     if (!useDemo && !files.metro && !files.brts && !files.amts) {
-      setError("Please upload at least one CSV file or load demo data.");
+      setError("Please upload at least one valid CSV file or load demo data.");
       return;
     }
 
@@ -58,7 +241,7 @@ const Reports = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze data');
+        throw new Error(data.error || 'Failed to import and analyze data');
       }
 
       setReportData(data);
@@ -122,27 +305,16 @@ const Reports = () => {
               <Database size={18} className="mr-2 text-raahx-orange" /> Data Sources
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              {['metro', 'brts', 'amts'].map(sys => {
-                const inputRef = sys === 'metro' ? metroInput : sys === 'brts' ? brtsInput : amtsInput;
-                const file = files[sys];
-                return (
-                  <div key={sys}>
-                    <label className="block text-sm font-semibold text-raahx-navy mb-2 capitalize">{sys} Dataset</label>
-                    <input 
-                      type="file" accept=".csv" onChange={(e) => handleFileChange(sys, e)} className="hidden" ref={inputRef}
-                    />
-                    <Button 
-                      variant="secondary" 
-                      className="w-full h-10 flex items-center justify-center border-dashed border-2 hover:border-raahx-orange transition-colors"
-                      onClick={() => inputRef.current.click()}
-                    >
-                      <FileUp size={16} className="mr-2 text-raahx-orange" />
-                      {file ? file.name : `Upload ${sys.toUpperCase()} CSV`}
-                    </Button>
-                  </div>
-                );
-              })}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 h-48">
+              {['metro', 'brts', 'amts'].map(sys => (
+                <UploadBox 
+                  key={sys}
+                  system={sys} 
+                  file={files[sys]} 
+                  onFileSelected={(f) => handleFileSelected(sys, f)} 
+                  onClear={() => handleClearFile(sys)} 
+                />
+              ))}
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-between pt-6 border-t border-gray-100 gap-4">
