@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FileUp, FileText, Printer, BarChart2, AlertCircle, TrendingUp, TrendingDown, Clock, MapPin, Database, RefreshCw, Layers } from 'lucide-react';
+import { FileUp, FileText, Printer, BarChart2, AlertCircle, TrendingUp, TrendingDown, Clock, MapPin, Database, RefreshCw, Layers, Search } from 'lucide-react';
 import { Card, CardContent } from '../components/Card';
 import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
