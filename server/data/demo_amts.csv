@@ -1,0 +1,11 @@
+date,hub_id,hub_name,ridership,scheduled_trips,completed_trips,avg_delay_min,rainfall_mm,incident_code,data_status
+2026-10-08,H01,Kalupur,2600,130,128,3,0,NONE,complete
+2026-10-09,H01,Kalupur,2500,130,126,4,6,NONE,complete
+2026-10-08,H02,Geeta Mandir,2100,105,103,3,0,NONE,complete
+2026-10-09,H02,Geeta Mandir,2000,105,102,4,6,NONE,complete
+2026-10-08,H03,Shivranjani,1800,90,89,3,0,NONE,complete
+2026-10-09,H03,Shivranjani,1650,90,87,5,6,NONE,complete
+2026-10-08,H04,Iscon,2300,115,113,3,0,NONE,complete
+2026-10-09,H04,Iscon,2200,115,112,4,6,NONE,complete
+2026-10-08,H05,Ranip,1900,95,94,2,0,NONE,complete
+2026-10-09,H05,Ranip,1850,95,93,3,6,NONE,complete
