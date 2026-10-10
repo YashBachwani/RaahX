@@ -1,4 +1,7 @@
-import { syntheticStops, syntheticEdges } from '../data/syntheticTransportNetwork';
+import networkData from '../data/realTransportNetwork.json';
+
+export const syntheticStops = networkData.stops;
+export const syntheticEdges = networkData.edges;
 
 // Build the adjacency list
 const graph = {};
@@ -7,8 +10,11 @@ syntheticStops.forEach(stop => {
 });
 
 syntheticEdges.forEach(edge => {
+  if (!graph[edge.from]) graph[edge.from] = [];
   graph[edge.from].push(edge);
+  
   if (edge.isBidirectional) {
+    if (!graph[edge.to]) graph[edge.to] = [];
     graph[edge.to].push({
       ...edge,
       from: edge.to,
@@ -45,6 +51,69 @@ const SCORING_PROFILES = {
   }
 };
 
+class MinHeap {
+  constructor() {
+    this.heap = [];
+  }
+  push(node) {
+    this.heap.push(node);
+    this.bubbleUp();
+  }
+  pop() {
+    if (this.heap.length === 1) return this.heap.pop();
+    const top = this.heap[0];
+    this.heap[0] = this.heap.pop();
+    this.bubbleDown();
+    return top;
+  }
+  isEmpty() {
+    return this.heap.length === 0;
+  }
+  bubbleUp() {
+    let index = this.heap.length - 1;
+    const element = this.heap[index];
+    while (index > 0) {
+      let parentIndex = Math.floor((index - 1) / 2);
+      let parent = this.heap[parentIndex];
+      if (element.score >= parent.score) break;
+      this.heap[index] = parent;
+      this.heap[parentIndex] = element;
+      index = parentIndex;
+    }
+  }
+  bubbleDown() {
+    let index = 0;
+    const length = this.heap.length;
+    const element = this.heap[0];
+    while (true) {
+      let leftChildIndex = 2 * index + 1;
+      let rightChildIndex = 2 * index + 2;
+      let leftChild, rightChild;
+      let swap = null;
+      
+      if (leftChildIndex < length) {
+        leftChild = this.heap[leftChildIndex];
+        if (leftChild.score < element.score) {
+          swap = leftChildIndex;
+        }
+      }
+      if (rightChildIndex < length) {
+        rightChild = this.heap[rightChildIndex];
+        if (
+          (swap === null && rightChild.score < element.score) ||
+          (swap !== null && rightChild.score < leftChild.score)
+        ) {
+          swap = rightChildIndex;
+        }
+      }
+      if (swap === null) break;
+      this.heap[index] = this.heap[swap];
+      this.heap[swap] = element;
+      index = swap;
+    }
+  }
+}
+
 /**
  * Dijkstra search with state = (stopId, routeId)
  */
@@ -54,7 +123,10 @@ function findOptimalRoute(originId, destId, profileName) {
 
   // Priority Queue (min-heap approximation using sorting for simplicity, given small graph)
   // State: { stopId, routeId, score, duration, walkDuration, transfers, fare, path: [], fareUnknown }
-  const queue = [{
+  // Priority Queue (min-heap approximation)
+  // State: { stopId, routeId, score, duration, walkDuration, transfers, fare, path: [], fareUnknown }
+  const queue = new MinHeap();
+  queue.push({
     stopId: originId,
     routeId: null,
     score: 0,
@@ -64,14 +136,12 @@ function findOptimalRoute(originId, destId, profileName) {
     fare: 0,
     fareUnknown: false,
     path: []
-  }];
+  });
 
   const visited = new Map(); // key: stopId_routeId
 
-  while (queue.length > 0) {
-    // Sort to act as priority queue
-    queue.sort((a, b) => a.score - b.score);
-    const current = queue.shift();
+  while (!queue.isEmpty()) {
+    const current = queue.pop();
 
     if (current.stopId === destId) {
       return {
