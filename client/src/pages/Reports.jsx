@@ -4,6 +4,7 @@ import { Card, CardContent } from '../components/Card';
 import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
 import Logo from '../components/Logo';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const Reports = () => {
   const [files, setFiles] = useState({ metro: null, brts: null, amts: null });
@@ -20,6 +21,8 @@ const Reports = () => {
       setFiles(prev => ({ ...prev, [system]: e.target.files[0] }));
       setError(null);
     }
+    // Reset so the same file can be selected again if needed
+    if (e.target) e.target.value = null;
   };
 
   const handleLoadDemo = async () => {
@@ -143,12 +146,19 @@ const Reports = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-between pt-6 border-t border-gray-100 gap-4">
-               <Button variant="ghost" onClick={handleLoadDemo} className="text-raahx-slate border border-gray-200">
-                  <Database size={16} className="mr-2" /> Load Synthetic Demo Data
-               </Button>
+               <div className="flex items-center gap-4 w-full sm:w-auto">
+                 <Button variant="ghost" onClick={handleLoadDemo} className="text-raahx-slate border border-gray-200">
+                    <Database size={16} className="mr-2" /> Load Synthetic Demo Data
+                 </Button>
+                 {(files.metro || files.brts || files.amts) && (
+                   <Button variant="ghost" onClick={() => { setFiles({ metro: null, brts: null, amts: null }); setError(null); }} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                      Clear Files
+                   </Button>
+                 )}
+               </div>
                <Button 
                  onClick={() => analyzeData(false)}
-                 disabled={!files.metro && !files.brts && !files.amts && !reportData?.isDemo}
+                 disabled={(!files.metro && !files.brts && !files.amts) || isAnalyzing}
                  className="min-w-[160px]"
                  icon={isAnalyzing ? <RefreshCw size={16} className="animate-spin" /> : <BarChart2 size={16} />}
                >
@@ -168,6 +178,7 @@ const Reports = () => {
 
       {/* Report Section */}
       {reportData && (
+        <ErrorBoundary>
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden print:shadow-none print:border-none print:m-0 print:p-0">
           
           {/* Print Header */}
@@ -338,6 +349,7 @@ const Reports = () => {
             RaahX Intelligence — Every Route. One Smarter Journey.
           </div>
         </div>
+        </ErrorBoundary>
       )}
     </div>
   );
